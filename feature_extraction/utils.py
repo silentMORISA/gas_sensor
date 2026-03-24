@@ -4,8 +4,11 @@ import numpy as np
 from typing import List, Tuple, Any, Optional
 import matplotlib.pyplot as plt
 import gc
+import os
 
 Point = Tuple[float, float]
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -48,8 +51,8 @@ def get_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/data/gas_test",
-        help="directory to save masks and features",
+        default="output",
+        help="directory to save masks and features; relative paths are created under the project root",
     )
     parser.add_argument(
         "--label_file",
@@ -93,11 +96,29 @@ def get_args():
         nargs='?',
         const=True,
         default=False,
-        help="Whether to visualize masks on images (use --visualize_masks true)",
+        help="Whether to save mask overlays on images to visualizations*/ (use --visualize_masks true)",
     )
 
     args = parser.parse_args()
     return args
+
+
+def resolve_save_dir(save_dir: str) -> str:
+    """Resolve save_dir and create it automatically if needed."""
+    if os.path.isabs(save_dir):
+        resolved = save_dir
+    else:
+        resolved = os.path.join(PROJECT_ROOT, save_dir)
+    os.makedirs(resolved, exist_ok=True)
+    return resolved
+
+
+def is_supported_image_file(path: str) -> bool:
+    return path.lower().endswith(SUPPORTED_IMAGE_EXTENSIONS)
+
+
+def get_mask_filename(image_path: str) -> str:
+    return os.path.splitext(os.path.basename(image_path))[0] + ".npy"
 
 
 def sort_3x3_row_major(points: List[Point], attach: Optional[List[Any]] = None):
@@ -147,7 +168,10 @@ def load_image(image_path: str) -> np.ndarray:
     加载图像为 RGB 格式的numpy数组
     Be careful that if use PIL.Image.open, the image might have orientation issues due to EXIF data
     """
-    image = cv2.cvtColor(cv2.imread(image_path), cv2.COLOR_BGR2RGB)
+    image_bgr = cv2.imread(image_path)
+    if image_bgr is None:
+        raise ValueError(f"Failed to read image: {image_path}")
+    image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     return image
 
 
@@ -189,16 +213,26 @@ def refine_circle(mask, keep_ratio=0.7):
     return new_mask
 
 
-def show_masks_on_image(raw_image, masks, random_color=True):
-  plt.imshow(np.array(raw_image))
-  ax = plt.gca()
-  ax.set_autoscale_on(False)
-  for mask in masks:
-      show_mask(mask, ax=ax, random_color=random_color)
-#   plt.axis("off")
-  plt.show()
-  del mask
-  gc.collect()
+def show_masks_on_image(raw_image, masks, random_color=True, save_path=None, title=None):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.imshow(np.array(raw_image))
+    ax.set_autoscale_on(False)
+    for mask in masks:
+        show_mask(mask, ax=ax, random_color=random_color)
+    if title:
+        ax.set_title(title)
+    ax.axis("off")
+    fig.tight_layout()
+
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=200, bbox_inches="tight", pad_inches=0)
+        plt.close(fig)
+    else:
+        plt.show()
+        plt.close(fig)
+
+    gc.collect()
 
 def show_mask(mask, ax, random_color=False):
     if random_color:

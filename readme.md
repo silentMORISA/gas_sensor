@@ -1,8 +1,14 @@
 # Gas Sensor
 
-This repository provides a workflow for extracting color features from gas sensor images with Meta's Segment Anything Model (SAM), followed by downstream machine learining modeling in Jupyter notebooks.
+This repository provides an end-to-end workflow for extracting color features from gas sensor images with Meta's Segment Anything Model (SAM), followed by downstream machine learning analysis in Jupyter notebooks.
 
-The feature extraction is implemented in `feature_extraction/extract_8_feature.py`. The repository also includes notebooks for MLP, Logistic Regression / Linear SVM, and XGBoost experiments.
+The main feature extraction pipeline is implemented in `feature_extraction/extract_8_feature.py`. The repository also includes notebooks for MLP, Logistic Regression / Linear SVM, and XGBoost experiments.
+
+## Pipeline Overview
+
+![Pipeline overview](images/pipeline.png)
+
+*Figure 1. Overview of the full pipeline used in this project, from image preprocessing and feature extraction to downstream modeling and analysis.*
 
 ## Installation
 
@@ -31,10 +37,10 @@ SAM installation should follow the official repository:
 
 - Official repository: https://github.com/facebookresearch/segment-anything
 
-This project includes the official SAM Git installation in `requirements.txt`. After PyTorch and SAM are installed you can run:
+This project includes the official SAM Git installation in `requirement.txt`, so after PyTorch is installed you can run:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirement.txt
 ```
 
 To use the environment directly in Jupyter, register it as a kernel:
@@ -50,6 +56,8 @@ python -m ipykernel install --user --name sam --display-name sam
 - `vit_h`: `https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth`
 - `vit_l`: `https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth`
 - `vit_b`: `https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth`
+
+Any of the three checkpoints can be used, provided that the selected model fits your available hardware. In practice, `vit_h` is recommended when GPU memory is sufficient.
 
 Example:
 
@@ -70,9 +78,9 @@ Key files in this repository include:
 - `printer.py`: lightweight logging utility
 - `shap_plot.py`: standalone SHAP plotting script
 
-## Input Data Layout
+## Input Images
 
-`extract_8_feature.py` recursively scans `--image_dir` and separates images by whether the directory path contains `before` or `after`. A recommended directory layout is:
+`extract_8_feature.py` recursively scans `--image_dir` and separates images according to whether the directory path contains `before` or `after`. A recommended directory layout is:
 
 ```text
 image_dir/
@@ -88,21 +96,31 @@ image_dir/
     └── after/
 ```
 
+The repository includes the following example image:
+
+![Example gas sensor image](images/example.jpg)
+
+*Figure 2. Example input image processed by `extract_8_feature.py`. Each image contains eight dye spots with similar sizes. The pipeline extracts RGB features from these circular dye regions.*
+
 Notes:
 
-- The current script processes `.jpg` files only.
-- Filenames should ideally contain exactly one numeric identifier, for example `1.jpg` or `25.jpg`.
+- The current script supports `.jpg`, `.jpeg`, and `.png` images.
+- Filenames should ideally contain exactly one numeric identifier, for example `1.jpg` or `25.png`.
 - The script uses the numeric identifier extracted from the filename as the sample `id`.
-- `--save_dir` must exist before running the script.
+- `--save_dir` is created automatically if it does not already exist.
+- If a relative path is provided for `--save_dir`, it is created under the project root.
 
 ## Label File Format
 
 To attach labels to the final `RGB_diff.csv`, provide `--label_file` as a CSV with at least the following columns:
 
 ```text
-id,label
-1,0
-2,1
++----+-------+
+| id | label |
++----+-------+
+| 1  | 0     |
+| 2  | 1     |
++----+-------+
 ```
 
 Where:
@@ -115,7 +133,8 @@ Where:
 The script writes the following outputs under `--save_dir`:
 
 - `masks.../`: filtered SAM masks
-- `masks_sorted.../`: sorted masks
+- `masks_sorted.../`: sorted masks used for feature extraction
+- `visualizations.../`: mask overlays saved on top of the original images when `--visualize_masks true` is enabled
 - `values.../`: `RGB_val_before.csv`, `RGB_val_after.csv`, and `RGB_diff.csv`
 
 Common naming patterns:
@@ -134,35 +153,42 @@ python feature_extraction/extract_8_feature.py --help
 
 Main arguments:
 
-- `--sam_type`: `vit_h`, `vit_l`, or `vit_b` (default 'vit_h')
+- `--sam_type`: `vit_h`, `vit_l`, or `vit_b`
 - `--sam_weights`: path to the SAM checkpoint
 - `--device`: `cuda` or `cpu`
 - `--image_dir`: input image directory
-- `--save_dir`: output directory
+- `--save_dir`: output directory; created automatically if missing
 - `--label_file`: optional label CSV
 - `--refine`: shrink each mask to a smaller circle
 - `--generate_masks`: skip SAM inference if sorted masks already exist
-- `--sample`: enable random sampling inside each circle
+- `--sample`: perform repeated random point sampling inside each dye region
+- `--visualize_masks`: save mask overlays on the original images
 - `--output_name`: custom experiment suffix
 
-`--generate_masks` defaults to `true`. Although `--visualize_masks` appears in the CLI help, it is not currently used inside `extract_8_feature.py`.
+`--generate_masks` defaults to `true`.
+
+### What `--refine` does
+
+If `--refine true` is **not** specified, the extracted mask tends to follow the dye region in `images/example.jpg` closely, including the boundary pixels of each dye spot. In practice, these boundary areas may contain uneven staining or edge artifacts, which can introduce bias into the RGB measurements.
+
+If `--refine true` is specified, each mask is contracted to a smaller circle with the same center. This reduces the influence of edge pixels and makes the extracted RGB values more focused on the central dye region.
+
+### What `--sample` does
+
+If `--sample true` is **not** specified, the script computes the RGB mean using all pixels inside each dye mask.
+
+If `--sample true` is specified, the script performs repeated random point sampling inside each dye region and then averages the sampled RGB values across multiple repeats. In the current implementation, each dye is sampled repeatedly with `n_repeats=10`, and the mean across repeats is used as the final output for that dye.
 
 ### Full run
 
-Create the output directory first:
-
-```bash
-mkdir -p /path/to/output
-```
-
-Then run the full pipeline:
+Run the full pipeline as follows:
 
 ```bash
 python feature_extraction/extract_8_feature.py \
   --sam_type vit_l \
-  --sam_weights /data/code/mywork/gas_sensor/weights/sam_checkpoints/sam_vit_l_0b3195.pth \
+  --sam_weights /path/to/sam_vit_l_0b3195.pth \
   --image_dir /path/to/raw_image \
-  --save_dir /path/to/output \
+  --save_dir output \
   --label_file /path/to/label.csv \
   --refine true
 ```
@@ -175,6 +201,23 @@ This command will:
 4. compute `RGB_diff.csv`
 5. append labels if `--label_file` is provided
 
+### Save mask visualizations
+
+To export mask overlays for all images:
+
+```bash
+python feature_extraction/extract_8_feature.py \
+  --sam_type vit_l \
+  --sam_weights /path/to/sam_vit_l_0b3195.pth \
+  --image_dir /path/to/raw_image \
+  --save_dir output \
+  --label_file /path/to/label.csv \
+  --refine true \
+  --visualize_masks true
+```
+
+The overlay images will be written to `visualizations.../` under `--save_dir`.
+
 ### Reuse existing masks
 
 If `masks_sorted_refine/` already exists, SAM inference can be skipped:
@@ -182,9 +225,9 @@ If `masks_sorted_refine/` already exists, SAM inference can be skipped:
 ```bash
 python feature_extraction/extract_8_feature.py \
   --sam_type vit_l \
-  --sam_weights /data/code/mywork/gas_sensor/weights/sam_checkpoints/sam_vit_l_0b3195.pth \
+  --sam_weights /path/to/sam_vit_l_0b3195.pth \
   --image_dir /path/to/raw_image \
-  --save_dir /path/to/output \
+  --save_dir output \
   --label_file /path/to/label.csv \
   --refine true \
   --generate_masks false
@@ -192,14 +235,14 @@ python feature_extraction/extract_8_feature.py \
 
 ### Enable sampling mode
 
-To sample random points inside each circular mask instead of averaging all pixels:
+To use repeated random sampling instead of averaging over all mask pixels:
 
 ```bash
 python feature_extraction/extract_8_feature.py \
   --sam_type vit_l \
-  --sam_weights /data/code/mywork/gas_sensor/weights/sam_checkpoints/sam_vit_l_0b3195.pth \
+  --sam_weights /path/to/sam_vit_l_0b3195.pth \
   --image_dir /path/to/raw_image \
-  --save_dir /path/to/output \
+  --save_dir output \
   --label_file /path/to/label.csv \
   --refine true \
   --sample true
@@ -207,9 +250,10 @@ python feature_extraction/extract_8_feature.py \
 
 Additional notes:
 
+- repeated sampling is applied independently to each dye region
 - the current implementation uses `n_repeats=10`
+- the final saved feature is the mean across repeated samplings
 - sampled outputs are typically written to `values_sample_refine/`
-- if refined masks already exist, add `--generate_masks false`
 
 ### Add a custom output suffix
 
@@ -218,9 +262,9 @@ To distinguish multiple experiments:
 ```bash
 python feature_extraction/extract_8_feature.py \
   --sam_type vit_l \
-  --sam_weights /data/code/mywork/gas_sensor/weights/sam_checkpoints/sam_vit_l_0b3195.pth \
+  --sam_weights /path/to/sam_vit_l_0b3195.pth \
   --image_dir /path/to/raw_image \
-  --save_dir /path/to/output \
+  --save_dir output \
   --label_file /path/to/label.csv \
   --refine true \
   --output_name exp1
@@ -261,6 +305,6 @@ Notes:
 
 ## Limitations
 
-- `extract_8_feature.py` currently supports `.jpg` inputs only.
-- `--save_dir` must exist before execution.
-- `--visualize_masks` is present in the CLI but is not active in the current implementation.
+- The current pipeline assumes that image filenames contain numeric identifiers.
+- The quality of SAM masks depends on image quality and the selected checkpoint.
+- `--sample true` performs repeated stochastic sampling; although the outputs are averaged, slight variation may still occur across runs.

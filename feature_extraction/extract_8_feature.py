@@ -32,6 +32,18 @@ class SAM():
         return masks
 
 
+def collect_image_paths(image_dir: str, keyword: str = None) -> List[str]:
+    raw_paths = []
+    for dirpath, _, filenames in os.walk(image_dir):
+        if keyword is not None and keyword not in dirpath:
+            continue
+        for filename in filenames:
+            if not is_supported_image_file(filename):
+                continue
+            raw_paths.append(os.path.join(dirpath, filename))
+    return sorted(raw_paths)
+
+
 def generate_masks(args):
     # ---加载模型---
     if args.device:
@@ -43,38 +55,32 @@ def generate_masks(args):
     print(f"Successfully load SAM model loaded on {device}.")
 
     # ---生成所有mask并保存---
-    raw_paths = []
-    for dirpath, dirnames, filenames in os.walk(args.image_dir):
-        if len(filenames) > 0:
-            raw_paths.extend([os.path.join(dirpath, f) for f in filenames])
-
-    if not os.path.exists(args.save_dir):
-        raise ValueError(f"Output directory {args.save_dir} does not exist.")
+    raw_paths = collect_image_paths(args.image_dir)
+    if not raw_paths:
+        raise ValueError(f"No supported images were found under {args.image_dir}.")
 
     print('Generating masks via SAM...')
+    mask_dir_all = os.path.join(args.save_dir, f'masks{args.output_name}')
     for raw_path in tqdm(raw_paths):
-        if not raw_path.endswith('.jpg'):
-            continue
         raw_image = load_image(raw_path)
         masks = sam.infer(raw_image)
         masks_ = filter_masks(masks, refine=args.refine)
         seg = np.array([i['segmentation'] for i in masks_]).astype(np.uint8)
         dirname, basename = os.path.dirname(raw_path), os.path.basename(raw_path)
         mask_dir = os.path.join(args.save_dir, f'masks{args.output_name}', os.path.relpath(dirname, args.image_dir))
-        if not os.path.exists(mask_dir):
-            os.makedirs(mask_dir)
-        np.save(os.path.join(mask_dir, basename.replace('.jpg', '.npy')), seg)
+        os.makedirs(mask_dir, exist_ok=True)
+        np.save(os.path.join(mask_dir, get_mask_filename(basename)), seg)
         if len(masks_) != 9 and len(masks_) != 8:
             print(f"Warning!! For {raw_path}, there are {len(masks)} mask before processing, and {len(masks_)} mask after processing.")
 
-    print(f'All masks saved to {mask_dir}!')
+    print(f'All masks saved to {mask_dir_all}!')
 
     # ---对每张图的mask进行排序并保存---
     mask_paths = []
-    mask_dir_all = os.path.join(args.save_dir, f'masks{args.output_name}')
     for dirpath, dirnames, filenames in os.walk(mask_dir_all):
         if len(filenames) > 0:
-            mask_paths.extend([os.path.join(dirpath, f) for f in filenames])
+            mask_paths.extend([os.path.join(dirpath, f) for f in filenames if f.endswith('.npy')])
+    mask_paths.sort()
 
     # 每张图的所有masks
     print('Sorting masks...')
@@ -91,29 +97,50 @@ def generate_masks(args):
         sorted_points, order = sort_3x3_row_major(points)
         seg = seg[order]
         mask_sorted_path = p.replace(f'masks{args.output_name}', f'masks_sorted{args.output_name}')
-        if not os.path.exists(os.path.dirname(mask_sorted_path)):
-            os.makedirs(os.path.dirname(mask_sorted_path))
+        os.makedirs(os.path.dirname(mask_sorted_path), exist_ok=True)
         np.save(mask_sorted_path, seg)
     print(f'All masks sorted and saved!')
 
 
+def save_mask_visualizations(args):
+    raw_paths = collect_image_paths(args.image_dir)
+    if not raw_paths:
+        return
+
+    print('Saving mask visualizations...')
+    for raw_path in tqdm(raw_paths):
+        dirname, basename = os.path.dirname(raw_path), os.path.basename(raw_path)
+        mask_path = os.path.join(
+            args.save_dir,
+            f'masks_sorted{args.output_name}',
+            os.path.relpath(dirname, args.image_dir),
+            get_mask_filename(basename),
+        )
+        if not os.path.exists(mask_path):
+            print(f"Warning!! Sorted mask not found for visualization: {mask_path}")
+            continue
+
+        raw_image = load_image(raw_path)
+        seg = np.load(mask_path).astype(bool)
+        viz_dir = os.path.join(
+            args.save_dir,
+            f'visualizations{args.output_name}',
+            os.path.relpath(dirname, args.image_dir),
+        )
+        save_path = os.path.join(viz_dir, f"{os.path.splitext(basename)[0]}_masks.png")
+        show_masks_on_image(raw_image, seg, random_color=False, save_path=save_path)
+    print('All mask visualizations saved!')
+
+
 def get_RGB_values(args):
     # ---提取特征并保存---
-    before_paths = []
-    after_paths = []
+    before_paths = collect_image_paths(args.image_dir, keyword='before')
+    after_paths = collect_image_paths(args.image_dir, keyword='after')
     n_repeats = 10
     sampler = CircleSampler(n_samples=100, repeat=n_repeats)  # 生成采样模式
     output_name = args.output_name
     if args.sample:
         args.output_name = '_sample'+args.output_name
-
-    for dirpath, dirnames, filenames in os.walk(args.image_dir):
-        if len(filenames) == 0:
-            continue
-        if 'before' in dirpath:
-            before_paths.extend([os.path.join(dirpath, f) for f in filenames])
-        if 'after' in dirpath:
-            after_paths.extend([os.path.join(dirpath, f) for f in filenames])
 
     for paths, name in zip([before_paths, after_paths], ['before', 'after']):
         features = []  # all features of before/after images
@@ -124,7 +151,14 @@ def get_RGB_values(args):
             img = load_image(p)
             img = np.array(img)
             dirname, basename = os.path.dirname(p), os.path.basename(p)
-            seg = np.load(os.path.join(args.save_dir, f'masks_sorted{output_name}', os.path.relpath(dirname, args.image_dir), basename.replace('.jpg', '.npy'))).astype(bool)
+            seg = np.load(
+                os.path.join(
+                    args.save_dir,
+                    f'masks_sorted{output_name}',
+                    os.path.relpath(dirname, args.image_dir),
+                    get_mask_filename(basename),
+                )
+            ).astype(bool)
 
             if args.sample:
                 feat = []  # all features of one image
@@ -137,8 +171,8 @@ def get_RGB_values(args):
                     rgb = []  # r, g, b features for one circle with n repeats
                     for xy in points:
                         rgb.append(img[xy[0], xy[1]].mean(axis=0).tolist())
-                    feat.append(np.stack(rgb))
-                features.append(np.column_stack(feat))
+                    feat.extend(np.stack(rgb).mean(axis=0).tolist())
+                features.append(feat)
                 
             else:
                 feat = []
@@ -151,7 +185,7 @@ def get_RGB_values(args):
         features = np.vstack(features)
         df = pd.DataFrame(features, columns=[f'{j}_{i}' for i in range(1, 9) for j in ['R', 'G', 'B']]).round(6)  # 特征编号从1到8
 
-        ids = [os.path.basename(p).replace('.jpg', '') for p in paths]
+        ids = [os.path.splitext(os.path.basename(p))[0] for p in paths]
         id_col = []
         for iid in ids:
             ints = re.findall(r"\d+", iid)
@@ -163,16 +197,12 @@ def get_RGB_values(args):
         if len(id_col) != len(ids):
             id_col = list(range(len(ids)))
 
-        if args.sample:
-            df.insert(0, 'id', np.repeat(id_col, n_repeats))
-        else:
-            df.insert(0, 'id', id_col)
+        df.insert(0, 'id', id_col)
 
         df_sorted = df.sort_values(by='id', ascending=True, kind='stable')
 
         value_dir = os.path.join(args.save_dir, f'values{args.output_name}')
-        if not os.path.exists(value_dir):
-            os.makedirs(value_dir)
+        os.makedirs(value_dir, exist_ok=True)
         df_sorted.to_csv(os.path.join(value_dir, f"RGB_val_{name}.csv"), index=False)
         print(f"RGB values saved to RGB_val_{name}.csv")
     print('All RGB values extracted and saved!')
@@ -181,6 +211,7 @@ def get_RGB_values(args):
 if __name__ == "__main__":
     # ---加载参数---
     args = get_args()
+    args.save_dir = resolve_save_dir(args.save_dir)
     if args.output_name:
         args.output_name = '_' + args.output_name.lstrip('_')
     
@@ -189,6 +220,9 @@ if __name__ == "__main__":
 
     if args.generate_masks:
         generate_masks(args)
+
+    if args.visualize_masks:
+        save_mask_visualizations(args)
 
     get_RGB_values(args)
 
@@ -205,10 +239,6 @@ if __name__ == "__main__":
     # if with labels
     if args.label_file is not None:
         label_df = pd.read_csv(args.label_file, index_col='id')
-        if args.sample:
-            label_expanded = np.repeat(label_df['label'].values, 10)
-            label_df = pd.DataFrame(label_expanded, index=res.index, columns=['label'])
-
         if len(label_df) != len(res):
             print(f"Warning!!! label file length {len(label_df)} does not match data length {len(res)}.")
 
