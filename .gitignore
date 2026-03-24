@@ -41,3 +41,8 @@ shap_plot.ipynb
 mlp_copy.ipynb
 xgboost_copy.ipynb
 LR_SVM_copy.ipynb
+readme_copy.md
+feature_extraction/extract_9_features.py
+feature_extraction/merge_files.ipynb
+feature_extraction/feature_extraction.ipynb
+feature_extraction/sample_circle.ipynb
