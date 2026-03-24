@@ -1,0 +1,43 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Data outputs / logs
+logs/
+out/
+output/
+
+# Generated data artifacts
+data/shap/
+wandb/
+weights_new/
+weights_old/
+
+
+# VS Code settings
+.vscode/
+
+# Environment
+.env
+
+# macOS
+.DS_Store
+
+# lock files
+*.lock
+
+
+# unused files
+cluster*.ipynb
+*loocv*
+mlp_sample.ipynb
+stat.ipynb
+test.ipynb
+xgboost_old.ipynb
+pack_*
+mlp_run_many_times.ipynb
+shap_plot.ipynb
+mlp_copy.ipynb
+xgboost_copy.ipynb
+LR_SVM_copy.ipynb

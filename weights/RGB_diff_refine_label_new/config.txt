@@ -1,0 +1,11 @@
+data_path:/data/gas_new/values_refine/RGB_diff_refine_label_new.csv
+INPUT_DIM: 24
+EPOCHS: 250
+BATCH_SIZE: 20
+LR: 0.0002
+PATIENCE: 10
+N_SPLITS: 5
+THRESHOLD: 0.5
+DROPOUT: 0.3
+use_smote: False
+use_posweight: False
