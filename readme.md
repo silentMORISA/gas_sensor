@@ -96,11 +96,7 @@ image_dir/
     └── after/
 ```
 
-The repository includes the following example image:
-
-![Example gas sensor image](images/example.jpg)
-
-*Figure 2. Example input image processed by `extract_8_feature.py`. Each image contains eight dye spots with similar sizes. The pipeline extracts RGB features from these circular dye regions.*
+For an example experiment image, please refer to `images/example.jpg`. Each input image contains eight dye spots with similar sizes, and the pipeline extracts RGB features from these circular dye regions.
 
 Notes:
 

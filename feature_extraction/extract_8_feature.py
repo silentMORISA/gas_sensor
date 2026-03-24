@@ -12,23 +12,19 @@ class SAM():
     def __init__(self, model_type: str, checkpoint_path: str, device: torch.device):
         self.device = device
         self.sam = sam_model_registry[model_type](checkpoint=checkpoint_path).to(device)
-
-    def infer(self, image: np.ndarray, points_per_side: int = 16,
-                       pred_iou_thresh: float = 0.95,
-                       stability_score_thresh: float = 0.95,
-                       crop_n_layers: int = 1,
-                       crop_n_points_downscale_factor: int = 2,
-                       min_mask_region_area: int = 1000) -> List[dict]:
-        mask_generator = SamAutomaticMaskGenerator(
+        self.mask_generator = SamAutomaticMaskGenerator(
             model=self.sam,
-            points_per_side=points_per_side,
-            pred_iou_thresh=pred_iou_thresh,
-            stability_score_thresh=stability_score_thresh,
-            crop_n_layers=crop_n_layers,
-            crop_n_points_downscale_factor=crop_n_points_downscale_factor,
-            min_mask_region_area=min_mask_region_area,
+            points_per_side=16,
+            pred_iou_thresh=0.95,
+            stability_score_thresh=0.95,
+            crop_n_layers=1,
+            crop_n_points_downscale_factor=2,
+            min_mask_region_area=1000,
         )
-        masks = mask_generator.generate(image)
+
+    def infer(self, image: np.ndarray) -> List[dict]:
+        with torch.inference_mode():
+            masks = self.mask_generator.generate(image)
         return masks
 
 

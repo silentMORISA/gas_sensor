@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 from typing import List, Tuple, Any, Optional
 import matplotlib.pyplot as plt
-import gc
 import os
 
 Point = Tuple[float, float]
@@ -213,26 +212,36 @@ def refine_circle(mask, keep_ratio=0.7):
     return new_mask
 
 
+def render_mask_overlay(raw_image, masks, random_color=True, alpha=0.6):
+    overlay = np.array(raw_image, copy=True).astype(np.float32)
+    for idx, mask in enumerate(masks):
+        mask_bool = np.asarray(mask).astype(bool)
+        if not np.any(mask_bool):
+            continue
+        if random_color:
+            rng = np.random.default_rng(idx)
+            color = rng.integers(0, 256, size=3, dtype=np.uint8).astype(np.float32)
+        else:
+            color = np.array([30, 144, 255], dtype=np.float32)
+        overlay[mask_bool] = overlay[mask_bool] * (1 - alpha) + color * alpha
+    return overlay.clip(0, 255).astype(np.uint8)
+
+
 def show_masks_on_image(raw_image, masks, random_color=True, save_path=None, title=None):
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.imshow(np.array(raw_image))
-    ax.set_autoscale_on(False)
-    for mask in masks:
-        show_mask(mask, ax=ax, random_color=random_color)
-    if title:
-        ax.set_title(title)
-    ax.axis("off")
-    fig.tight_layout()
+    overlay = render_mask_overlay(raw_image, masks, random_color=random_color)
 
     if save_path is not None:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=200, bbox_inches="tight", pad_inches=0)
-        plt.close(fig)
+        cv2.imwrite(save_path, cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
     else:
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.imshow(overlay)
+        if title:
+            ax.set_title(title)
+        ax.axis("off")
+        fig.tight_layout()
         plt.show()
         plt.close(fig)
-
-    gc.collect()
 
 def show_mask(mask, ax, random_color=False):
     if random_color:
@@ -242,8 +251,6 @@ def show_mask(mask, ax, random_color=False):
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
-    del mask
-    gc.collect()
 
 
 class CircleSampler:
