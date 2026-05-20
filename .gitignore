@@ -11,9 +11,10 @@ output/
 # Generated data artifacts
 data/shap/
 wandb/
+weights/
 weights_new/
-weights_old/
-
+weights_old*/
+rebuttle/
 
 # VS Code settings
 .vscode/
@@ -38,11 +39,14 @@ xgboost_old.ipynb
 pack_*
 mlp_run_many_times.ipynb
 shap_plot.ipynb
-mlp_copy.ipynb
-xgboost_copy.ipynb
-LR_SVM_copy.ipynb
-readme_copy.md
+mlp_bayes.ipynb
+xgboost_bayes.ipynb
+LR_SVM_bayes.ipynb
+readme_bayes.md
 feature_extraction/extract_9_features.py
 feature_extraction/merge_files.ipynb
 feature_extraction/feature_extraction.ipynb
 feature_extraction/sample_circle.ipynb
+stat_sampling.ipynb
+train_pair_resnet.py
+readme_bayes.md

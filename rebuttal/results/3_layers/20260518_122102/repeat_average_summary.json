@@ -1,0 +1,48 @@
+{
+  "seed_file": "seeds/repeat_seeds.json",
+  "n_repeats": 10,
+  "n_splits": 5,
+  "metrics": {
+    "acc": {
+      "mean": 0.8017094017094017,
+      "std": 0.009052479593497698
+    },
+    "f1": {
+      "mean": 0.845435515216475,
+      "std": 0.007138224296007908
+    },
+    "auc": {
+      "mean": 0.8561911764705883,
+      "std": 0.012603254940221676
+    },
+    "precision": {
+      "mean": 0.8063642472938138,
+      "std": 0.011468279824020423
+    },
+    "recall": {
+      "mean": 0.8959558823529413,
+      "std": 0.009931915717875873
+    }
+  },
+  "config": {
+    "run_id": "20260518_122102",
+    "run_dir": "results/3_layers/20260518_122102",
+    "data_path": "/data/jxiao/gas_data/gas_new/values_refine/RGB_diff_refine_label_new_n2.csv",
+    "INPUT_DIM": 8,
+    "EPOCHS": 250,
+    "BATCH_SIZE": 20,
+    "LR": 0.0002,
+    "PATIENCE": 10,
+    "N_SPLITS": 5,
+    "N_REPEATS": 10,
+    "BASE_SEED": 42,
+    "seed_dir": "seeds",
+    "result_dir": "results/3_layers",
+    "SEED_FILE": "seeds/repeat_seeds.json",
+    "REUSE_SEEDS": true,
+    "THRESHOLD": 0.5,
+    "DROPOUT": 0.3,
+    "use_smote": false,
+    "use_posweight": false
+  }
+}

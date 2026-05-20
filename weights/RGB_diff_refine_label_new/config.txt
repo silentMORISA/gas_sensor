@@ -1,5 +1,5 @@
-data_path:/data/gas_new/values_refine/RGB_diff_refine_label_new.csv
-INPUT_DIM: 24
+data_path:/data/jxiao/gas_data/gas_new/values_refine/RGB_diff_refine_label_new_n2.csv
+INPUT_DIM: 8
 EPOCHS: 250
 BATCH_SIZE: 20
 LR: 0.0002
